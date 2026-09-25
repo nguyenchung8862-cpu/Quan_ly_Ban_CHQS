@@ -1,0 +1,16 @@
+{
+  "id": "./",
+  "name": "BCHQS Chỉ huy - Bù Gia Mập",
+  "short_name": "BCHQS Chỉ huy",
+  "description": "Ứng dụng Chỉ huy BCHQS - xem dữ liệu điều hành từ gói .bgm được mã hóa.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eef2ec",
+  "theme_color": "#294d2c",
+  "icons": [
+    {"src":"./icons/icon-192.png","sizes":"192x192","type":"image/png"},
+    {"src":"./icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}
+  ]
+}
