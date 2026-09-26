@@ -87,8 +87,19 @@ async function dbGet(){const db=await openDB();return new Promise((res,rej)=>{co
 
 function msg(text,type=""){$("gateMsg").textContent=text;$('gateMsg').className="message"+(type?" "+type:"")}
 
+function normalizeEnvelopeText(text){
+  return String(text||"").replace(/^\uFEFF/,"").trim();
+}
+
+function inspectEnvelopeText(text){
+  let env;
+  try{env=JSON.parse(normalizeEnvelopeText(text))}catch{throw new Error("File không đúng định dạng dữ liệu BCHQS.")}
+  if(env?.magic!==MAGIC || Number(env?.version)!==FORMAT_VERSION) throw new Error("File không phải dữ liệu BCHQS Chỉ huy hợp lệ.");
+  return env;
+}
+
 function setSelected(name,text){
-  selectedName=name; selectedText=text;
+  selectedName=name; selectedText=normalizeEnvelopeText(text);
   $("selectedFile").textContent=name;
   $("selectedFile").classList.remove("hidden");
   $("passwordBlock").classList.remove("hidden");
@@ -99,8 +110,16 @@ function setSelected(name,text){
 
 $("bgmFile").addEventListener("change",async e=>{
   const file=e.target.files?.[0]; if(!file)return;
-  if(!file.name.toLowerCase().endsWith(".bgm")){msg("Hãy chọn đúng file có đuôi .bgm.","error");return}
-  try{setSelected(file.name,await file.text())}catch{msg("Không đọc được file.","error")}
+  try{
+    if(file.size>20*1024*1024) throw new Error("File dữ liệu quá lớn.");
+    const text=normalizeEnvelopeText(await file.text());
+    inspectEnvelopeText(text);
+    setSelected(file.name||"Du_lieu_BCHQS_BGM",text);
+    if(!String(file.name||"").toLowerCase().endsWith(".bgm")) msg("Đã nhận file do ứng dụng khác đổi tên/đuôi. Nội dung BCHQS vẫn hợp lệ.","ok");
+  }catch(err){
+    selectedText=null;
+    msg(err?.message||"Không đọc được file dữ liệu BCHQS.","error");
+  }
 });
 
 $("togglePassword").addEventListener("click",()=>{

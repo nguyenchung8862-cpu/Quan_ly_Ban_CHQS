@@ -1,3 +1,5 @@
+BCHQS CHỈ HUY PWA V0.3 - TƯƠNG THÍCH FILE TẢI QUA ZALO
+
 BCHQS CHỈ HUY PWA V0.2 - GITHUB PAGES
 =====================================
 
@@ -33,3 +35,6 @@ BẢO MẬT
 GHI CHÚ
 - App khóa pinch-zoom/double-tap zoom trong giao diện như bản V0.1.
 - Dữ liệu giải mã không được gửi lên GitHub Pages.
+
+
+V0.3: Không bắt buộc tên file phải có đuôi .bgm. Ứng dụng kiểm tra chữ ký nội dung BCHQS_BGM_ENCRYPTED nên file tải qua Zalo bị đổi tên/đuôi vẫn có thể mở nếu nội dung không bị thay đổi.
