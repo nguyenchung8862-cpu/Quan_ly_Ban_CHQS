@@ -2,7 +2,7 @@
   "id": "./",
   "name": "BCHQS Chỉ huy - Bù Gia Mập",
   "short_name": "BCHQS Chỉ huy",
-  "description": "Ứng dụng Chỉ huy BCHQS - xem dữ liệu điều hành từ gói .bgm được mã hóa.",
+  "description": "Ứng dụng Chỉ huy BCHQS - xem dữ liệu điều hành từ file .json được mã hóa.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

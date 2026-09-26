@@ -53,7 +53,7 @@ async function deriveKey(password, salt, iterations){
 async function decryptEnvelope(text,password){
   let env;
   try{env=JSON.parse(text)}catch{throw new Error("File không đúng định dạng BCHQS Mobile.")}
-  if(env.magic!==MAGIC || env.version!==FORMAT_VERSION) throw new Error("Phiên bản file .bgm không được hỗ trợ.");
+  if(env.magic!==MAGIC || env.version!==FORMAT_VERSION) throw new Error("Phiên bản file dữ liệu không được hỗ trợ.");
   if(env.kdf?.name!=="PBKDF2-HMAC-SHA-256" || env.cipher?.name!=="AES-256-GCM") throw new Error("Thuật toán mã hóa không hợp lệ.");
   const salt=base64ToBytes(env.kdf.salt);
   const iv=base64ToBytes(env.cipher.iv);
@@ -114,8 +114,7 @@ $("bgmFile").addEventListener("change",async e=>{
     if(file.size>20*1024*1024) throw new Error("File dữ liệu quá lớn.");
     const text=normalizeEnvelopeText(await file.text());
     inspectEnvelopeText(text);
-    setSelected(file.name||"Du_lieu_BCHQS_BGM",text);
-    if(!String(file.name||"").toLowerCase().endsWith(".bgm")) msg("Đã nhận file do ứng dụng khác đổi tên/đuôi. Nội dung BCHQS vẫn hợp lệ.","ok");
+    setSelected(file.name||"Du_lieu_BCHQS_BGM.json",text);
   }catch(err){
     selectedText=null;
     msg(err?.message||"Không đọc được file dữ liệu BCHQS.","error");
@@ -145,7 +144,7 @@ $("unlockBtn").addEventListener("click",async()=>{
 
 $("reuseBtn").addEventListener("click",async()=>{
   const x=await dbGet(); if(!x)return;
-  setSelected(x.name||"Du_lieu_BCHQS_BGM.bgm",x.text);
+  setSelected(x.name||"Du_lieu_BCHQS_BGM.json",x.text);
 });
 
 $("lockBtn").addEventListener("click",lockApp);

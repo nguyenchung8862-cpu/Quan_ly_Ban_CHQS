@@ -1,5 +1,5 @@
 "use strict";
-const CACHE = "bchqs-chihuy-v0.3.0-zalo";
+const CACHE = "bchqs-chihuy-v0.4.0-json";
 const RELATIVE_ASSETS = [
   "./",
   "./index.html",

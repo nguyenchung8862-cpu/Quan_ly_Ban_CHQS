@@ -17,7 +17,7 @@
   <div id="app" class="app-shell">
     <section id="gate" class="gate screen active">
       <div class="brand-card">
-        <div class="brand-mark">BGM</div>
+        <div class="brand-mark">JSON</div>
         <div>
           <h1>BCHQS CHỈ HUY</h1>
           <p>Ban CHQS xã Bù Gia Mập</p>
@@ -27,10 +27,10 @@
       <div class="gate-card">
         <div class="lock-icon">🔐</div>
         <h2 id="gateTitle">Nhập dữ liệu BCHQS</h2>
-        <p id="gateHint">Chọn file dữ liệu đã xuất từ BCHQS. Nếu Zalo đổi tên hoặc đổi đuôi file, ứng dụng vẫn kiểm tra theo nội dung mã hóa bên trong.</p>
+        <p id="gateHint">Chọn file .json đã xuất từ BCHQS. Dữ liệu bên trong vẫn được mã hóa và giải mã ngay trên điện thoại.</p>
 
         <label class="file-btn">
-          <input id="bgmFile" type="file" hidden>
+          <input id="bgmFile" type="file" accept=".json,application/json" hidden>
           <span>Chọn file dữ liệu</span>
         </label>
 
