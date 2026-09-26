@@ -5,6 +5,7 @@ const FORMAT_VERSION = 1;
 const AAD_TEXT = "BCHQS-BGM|1";
 const DB_NAME = "bchqs_chihuy_pwa";
 const DB_STORE = "encrypted_files";
+const DB_SETTINGS_STORE = "settings";
 const DB_KEY = "latest";
 
 let currentData = null;
@@ -12,6 +13,9 @@ let currentEnvelopeText = null;
 let selectedText = null;
 let selectedName = "";
 let taskFilter = "all";
+let selectedOrigin = "local";
+let syncConfig = null;
+let syncTimer = null;
 
 const $ = id => document.getElementById(id);
 
@@ -78,13 +82,20 @@ function validateData(data){
 
 function openDB(){
   return new Promise((resolve,reject)=>{
-    const r=indexedDB.open(DB_NAME,1);
-    r.onupgradeneeded=()=>{const db=r.result;if(!db.objectStoreNames.contains(DB_STORE))db.createObjectStore(DB_STORE)};
+    const r=indexedDB.open(DB_NAME,2);
+    r.onupgradeneeded=()=>{
+      const db=r.result;
+      if(!db.objectStoreNames.contains(DB_STORE))db.createObjectStore(DB_STORE);
+      if(!db.objectStoreNames.contains(DB_SETTINGS_STORE))db.createObjectStore(DB_SETTINGS_STORE);
+    };
     r.onsuccess=()=>resolve(r.result); r.onerror=()=>reject(r.error);
   });
 }
 async function dbPut(value){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(DB_STORE,"readwrite");tx.objectStore(DB_STORE).put(value,DB_KEY);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
 async function dbGet(){const db=await openDB();return new Promise((res,rej)=>{const r=db.transaction(DB_STORE,"readonly").objectStore(DB_STORE).get(DB_KEY);r.onsuccess=()=>res(r.result||null);r.onerror=()=>rej(r.error)})}
+async function dbPutSetting(key,value){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(DB_SETTINGS_STORE,"readwrite");tx.objectStore(DB_SETTINGS_STORE).put(value,key);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
+async function dbGetSetting(key){const db=await openDB();return new Promise((res,rej)=>{const r=db.transaction(DB_SETTINGS_STORE,"readonly").objectStore(DB_SETTINGS_STORE).get(key);r.onsuccess=()=>res(r.result??null);r.onerror=()=>rej(r.error)})}
+async function dbDeleteSetting(key){const db=await openDB();return new Promise((res,rej)=>{const tx=db.transaction(DB_SETTINGS_STORE,"readwrite");tx.objectStore(DB_SETTINGS_STORE).delete(key);tx.oncomplete=()=>res();tx.onerror=()=>rej(tx.error)})}
 
 function msg(text,type=""){$("gateMsg").textContent=text;$('gateMsg').className="message"+(type?" "+type:"")}
 
@@ -99,8 +110,8 @@ function inspectEnvelopeText(text){
   return env;
 }
 
-function setSelected(name,text){
-  selectedName=name; selectedText=normalizeEnvelopeText(text);
+function setSelected(name,text,origin="local"){
+  selectedName=name; selectedText=normalizeEnvelopeText(text); selectedOrigin=origin;
   $("selectedFile").textContent=name;
   $("selectedFile").classList.remove("hidden");
   $("passwordBlock").classList.remove("hidden");
@@ -115,7 +126,7 @@ $("bgmFile").addEventListener("change",async e=>{
     if(file.size>20*1024*1024) throw new Error("File dữ liệu quá lớn.");
     const text=normalizeEnvelopeText(await file.text());
     inspectEnvelopeText(text);
-    setSelected(file.name||"Du_lieu_BCHQS_BGM.json",text);
+    setSelected(file.name||"Du_lieu_BCHQS_BGM.json",text,"local");
   }catch(err){
     selectedText=null;
     msg(err?.message||"Không đọc được file dữ liệu BCHQS.","error");
@@ -136,16 +147,21 @@ $("unlockBtn").addEventListener("click",async()=>{
   try{
     currentData=await decryptEnvelope(selectedText,password);
     currentEnvelopeText=selectedText;
-    await dbPut({name:selectedName,text:selectedText,savedAt:Date.now()});
+    await dbPut({name:selectedName,text:selectedText,savedAt:Date.now(),source:selectedOrigin});
+    if(syncConfig?.rememberPassword) await dbPutSetting("unlockPassword",password);
+    else await dbDeleteSetting("unlockPassword").catch(()=>{});
     $("password").value="";
     renderApp();showMain();
+    if(selectedOrigin==="local" && syncConfig?.isUploader){
+      pushCurrentEnvelope().catch(err=>setCloudState("Đồng bộ lỗi: "+(err?.message||"không gửi được"),"err"));
+    }
   }catch(err){msg(err.message||"Không mở được dữ liệu.","error")}
   finally{b.disabled=false;b.textContent="Mở khóa dữ liệu"}
 });
 
 $("reuseBtn").addEventListener("click",async()=>{
   const x=await dbGet(); if(!x)return;
-  setSelected(x.name||"Du_lieu_BCHQS_BGM.json",x.text);
+  setSelected(x.name||"Du_lieu_BCHQS_BGM.json",x.text,x.source||"local");
 });
 
 $("lockBtn").addEventListener("click",lockApp);
@@ -219,7 +235,9 @@ function renderApp(){
     [overdue.length,"Quá hạn","danger","!"],
     [alerts.length,"Cảnh báo","danger","⚠"]
   ];
-  $("kpis").innerHTML=kpiData.map(([n,l,c,i])=>`<div class="kpi ${c}"><div class="kpi-icon">${i}</div><small>${esc(l).toUpperCase()}</small><strong>${n}</strong></div>`).join("");
+  const kpiKeys=["active","soon","overdue","alerts"];
+  $("kpis").innerHTML=kpiData.map(([n,l,c,i],idx)=>`<div class="kpi ${c}" data-kpi="${kpiKeys[idx]}" role="button" tabindex="0"><div class="kpi-icon">${i}</div><small>${esc(l).toUpperCase()}</small><strong>${n}</strong></div>`).join("");
+  bindKpis();
 
   const attention=[
     ...alerts.slice(0,3),
@@ -236,6 +254,7 @@ function renderApp(){
 }
 
 function filterTasks(list,filter){
+  if(filter==="active")return list.filter(x=>!isDone(x));
   if(filter==="incoming")return list.filter(isIncoming);
   if(filter==="overdue")return list.filter(isOverdue);
   if(filter==="soon")return list.filter(isSoon);
@@ -245,6 +264,7 @@ function filterTasks(list,filter){
 function updateTaskFilterCounts(tasks){
   const map={
     filterCountAll:tasks.length,
+    filterCountActive:tasks.filter(x=>!isDone(x)).length,
     filterCountIncoming:tasks.filter(isIncoming).length,
     filterCountOverdue:tasks.filter(isOverdue).length,
     filterCountSoon:tasks.filter(isSoon).length,
@@ -328,19 +348,214 @@ function renderStale(v){
 function updateOnlineState(){ $("offlineBanner").classList.toggle("hidden",navigator.onLine); }
 window.addEventListener("online",updateOnlineState);window.addEventListener("offline",updateOnlineState);
 
-for(const btn of document.querySelectorAll(".nav-btn")){
-  btn.addEventListener("click",()=>{
-    document.querySelectorAll(".nav-btn").forEach(x=>x.classList.toggle("active",x===btn));
-    document.querySelectorAll(".tab-page").forEach(p=>p.classList.toggle("active",p.dataset.page===btn.dataset.nav));
-    $("content").scrollTop=0;
+function activatePage(page){
+  document.querySelectorAll(".nav-btn").forEach(x=>x.classList.toggle("active",x.dataset.nav===page));
+  document.querySelectorAll(".tab-page").forEach(p=>p.classList.toggle("active",p.dataset.page===page));
+  $("content").scrollTop=0;
+}
+function setTaskFilter(filter){
+  taskFilter=filter;
+  document.querySelectorAll(".filter-btn").forEach(x=>x.classList.toggle("active",x.dataset.filter===filter));
+  renderTasks();
+  activatePage("tasks");
+}
+function bindKpis(){
+  document.querySelectorAll("[data-kpi]").forEach(el=>{
+    const go=()=>{
+      const k=el.dataset.kpi;
+      if(k==="alerts"){activatePage("alerts");return}
+      setTaskFilter(k||"all");
+    };
+    el.onclick=go;
+    el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();go()}};
   });
 }
+for(const btn of document.querySelectorAll(".nav-btn")) btn.addEventListener("click",()=>activatePage(btn.dataset.nav));
+
+/* ===== GITHUB-ONLY AUTO SYNC V0.7 ===== */
+const GITHUB_DATA_PATH = "data/latest.json";
+
+function cleanGithubValue(v){return String(v||"").trim()}
+function detectGithubPagesRepo(){
+  const host=String(location.hostname||"").toLowerCase();
+  if(!host.endsWith(".github.io")) return {owner:"",repo:"",branch:"main"};
+  const owner=host.slice(0,-10);
+  const parts=String(location.pathname||"/").split("/").filter(Boolean);
+  const repo=parts.length?parts[0]:(owner?owner+".github.io":"");
+  return {owner,repo,branch:"main"};
+}
+function githubRawUrl(cfg=syncConfig){
+  if(!cfg?.owner||!cfg?.repo||!cfg?.branch)return "";
+  const path=GITHUB_DATA_PATH.split("/").map(encodeURIComponent).join("/");
+  return `https://raw.githubusercontent.com/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}/${encodeURIComponent(cfg.branch)}/${path}`;
+}
+function githubApiContentsUrl(cfg=syncConfig){
+  if(!cfg?.owner||!cfg?.repo)return "";
+  const path=GITHUB_DATA_PATH.split("/").map(encodeURIComponent).join("/");
+  return `https://api.github.com/repos/${encodeURIComponent(cfg.owner)}/${encodeURIComponent(cfg.repo)}/contents/${path}`;
+}
+function setCloudState(text,type=""){
+  const e=$("cloudState"); if(e)e.textContent=text||"GitHub: chưa thiết lập";
+  const m=$("syncModalStatus"); if(m){m.textContent=text||"";m.className="sync-modal-status"+(type?" "+type:"")}
+}
+function syncNameFromEnvelope(text){
+  try{const e=inspectEnvelopeText(text);const d=new Date(e.createdAt||Date.now());return "Du_lieu_BCHQS_DONG_BO_"+d.toISOString().replace(/[:.]/g,"-")+".json"}catch{return "Du_lieu_BCHQS_DONG_BO.json"}
+}
+async function loadSyncConfig(){
+  syncConfig=await dbGetSetting("syncConfig")||null;
+  const auto=detectGithubPagesRepo();
+  if(syncConfig && !syncConfig.owner && (syncConfig.serverUrl || syncConfig.channel)){
+    // Di trú thiết lập V0.6 Cloudflare: giữ tùy chọn nhớ mật khẩu, nhưng xóa khóa upload cũ.
+    syncConfig={owner:auto.owner,repo:auto.repo,branch:auto.branch||"main",isUploader:false,uploadKey:"",rememberPassword:!!syncConfig.rememberPassword};
+    await dbPutSetting("syncConfig",syncConfig);
+  }
+  if(!syncConfig && auto.owner && auto.repo){
+    syncConfig={owner:auto.owner,repo:auto.repo,branch:auto.branch,isUploader:false,uploadKey:"",rememberPassword:false};
+    await dbPutSetting("syncConfig",syncConfig);
+  }
+  if(syncConfig){
+    syncConfig.owner=cleanGithubValue(syncConfig.owner||auto.owner);
+    syncConfig.repo=cleanGithubValue(syncConfig.repo||auto.repo);
+    syncConfig.branch=cleanGithubValue(syncConfig.branch||"main")||"main";
+    setCloudState(syncConfig.isUploader?"GitHub: Máy đồng bộ":"GitHub: tự động");
+  }else setCloudState("GitHub: chưa thiết lập");
+  return syncConfig;
+}
+function fillSyncModal(){
+  const auto=detectGithubPagesRepo();
+  $("syncGithubOwner").value=syncConfig?.owner||auto.owner||"";
+  $("syncGithubRepo").value=syncConfig?.repo||auto.repo||"";
+  $("syncGithubBranch").value=syncConfig?.branch||auto.branch||"main";
+  $("syncIsUploader").checked=!!syncConfig?.isUploader;
+  $("syncUploadKey").value=syncConfig?.uploadKey||"";
+  $("syncRememberPassword").checked=!!syncConfig?.rememberPassword;
+  $("syncUploadKeyWrap").classList.toggle("hidden",!$("syncIsUploader").checked);
+  $("syncPushBtn").classList.toggle("hidden",!$("syncIsUploader").checked);
+}
+function openSyncModal(){fillSyncModal();$("syncModal").classList.remove("hidden")}
+function closeSyncModal(){$("syncModal").classList.add("hidden")}
+async function saveSyncConfig(){
+  const cfg={
+    owner:cleanGithubValue($("syncGithubOwner").value),
+    repo:cleanGithubValue($("syncGithubRepo").value),
+    branch:cleanGithubValue($("syncGithubBranch").value)||"main",
+    isUploader:!!$("syncIsUploader").checked,
+    uploadKey:String($("syncUploadKey").value||"").trim(),
+    rememberPassword:!!$("syncRememberPassword").checked
+  };
+  const safe=/^[A-Za-z0-9_.-]+$/;
+  if(!cfg.owner||!safe.test(cfg.owner))throw new Error("Tên tài khoản GitHub không hợp lệ.");
+  if(!cfg.repo||!safe.test(cfg.repo))throw new Error("Tên repository không hợp lệ.");
+  if(!cfg.branch)throw new Error("Chưa nhập nhánh GitHub.");
+  if(cfg.isUploader&&cfg.uploadKey.length<20)throw new Error("GitHub token chưa hợp lệ hoặc quá ngắn.");
+  syncConfig=cfg;await dbPutSetting("syncConfig",cfg);
+  if(!cfg.rememberPassword)await dbDeleteSetting("unlockPassword").catch(()=>{});
+  setCloudState(cfg.isUploader?"GitHub: Máy đồng bộ":"GitHub: tự động","ok");
+  return cfg;
+}
+async function fetchRemoteEnvelope(){
+  const url=githubRawUrl(); if(!url)throw new Error("Chưa xác định repository GitHub.");
+  const r=await fetch(url+"?v="+Date.now(),{method:"GET",cache:"no-store",headers:{"Accept":"application/json"}});
+  if(r.status===404)return null;
+  if(!r.ok)throw new Error("Không đọc được GitHub ("+r.status+").");
+  const text=normalizeEnvelopeText(await r.text()); inspectEnvelopeText(text); return text;
+}
+function envelopeCreatedAt(text){try{return String(inspectEnvelopeText(text).createdAt||"")}catch{return ""}}
+async function pullRemoteEnvelope({silent=false}={}){
+  if(!syncConfig?.owner||!syncConfig?.repo||!navigator.onLine)return false;
+  if(!silent)setCloudState("GitHub: đang kiểm tra...");
+  const remote=await fetchRemoteEnvelope();
+  if(!remote){if(!silent)setCloudState("GitHub: chưa có data/latest.json");return false}
+  const local=await dbGet().catch(()=>null);
+  const same=local?.text&&normalizeEnvelopeText(local.text)===remote;
+  if(same){if(!silent)setCloudState("GitHub: đã là bản mới nhất","ok");return false}
+  await dbPut({name:syncNameFromEnvelope(remote),text:remote,savedAt:Date.now(),source:"remote"});
+  const pw=await dbGetSetting("unlockPassword").catch(()=>null);
+  if(pw){
+    try{
+      const d=await decryptEnvelope(remote,pw);
+      currentData=d;currentEnvelopeText=remote;selectedText=remote;selectedName=syncNameFromEnvelope(remote);selectedOrigin="remote";
+      renderApp();showMain();setCloudState("GitHub: đã nhận bản mới "+fmtShortDate(d.generatedAt),"ok");
+      return true;
+    }catch{
+      await dbDeleteSetting("unlockPassword").catch(()=>{});
+      setSelected(syncNameFromEnvelope(remote),remote,"remote");
+      msg("Đã nhận bản mới từ GitHub. Nhập mật khẩu một lần để tiếp tục tự động.","ok");
+      setCloudState("GitHub: bản mới cần mở khóa","err");
+      return true;
+    }
+  }
+  setSelected(syncNameFromEnvelope(remote),remote,"remote");
+  msg("Đã nhận bản mới từ GitHub. Nhập mật khẩu để mở dữ liệu.","ok");
+  setCloudState("GitHub: bản mới chờ mở khóa","ok");
+  return true;
+}
+async function githubCurrentSha(){
+  const url=githubApiContentsUrl(); if(!url)throw new Error("Chưa xác định repository GitHub.");
+  const headers={
+    "Accept":"application/vnd.github+json",
+    "Authorization":"Bearer "+syncConfig.uploadKey,
+    "X-GitHub-Api-Version":"2022-11-28"
+  };
+  const r=await fetch(url+"?ref="+encodeURIComponent(syncConfig.branch),{method:"GET",cache:"no-store",headers});
+  if(r.status===404)return null;
+  if(!r.ok){let j=null;try{j=await r.json()}catch{};throw new Error(j?.message||("GitHub trả lỗi "+r.status))}
+  const j=await r.json(); return j?.sha||null;
+}
+async function pushCurrentEnvelope(){
+  if(!syncConfig?.isUploader)throw new Error("Điện thoại này không phải Máy đồng bộ.");
+  if(!currentEnvelopeText)throw new Error("Chưa có file dữ liệu đang mở.");
+  if(!syncConfig.uploadKey)throw new Error("Chưa nhập GitHub token.");
+  const url=githubApiContentsUrl(); if(!url)throw new Error("Chưa xác định repository GitHub.");
+  setCloudState("GitHub: đang đưa bản mới lên...");
+  const sha=await githubCurrentSha();
+  const body={
+    message:"BCHQS: cap nhat du lieu Chi huy "+new Date().toISOString(),
+    content:bytesToBase64(enc(currentEnvelopeText)),
+    branch:syncConfig.branch
+  };
+  if(sha)body.sha=sha;
+  const r=await fetch(url,{method:"PUT",headers:{
+    "Accept":"application/vnd.github+json",
+    "Authorization":"Bearer "+syncConfig.uploadKey,
+    "Content-Type":"application/json",
+    "X-GitHub-Api-Version":"2022-11-28"
+  },body:JSON.stringify(body)});
+  if(!r.ok){let j=null;try{j=await r.json()}catch{};throw new Error(j?.message||("GitHub trả lỗi "+r.status))}
+  setCloudState("GitHub: đã phát bản mới lúc "+new Date().toLocaleTimeString("vi-VN",{hour:"2-digit",minute:"2-digit"}),"ok");
+  return true;
+}
+async function tryOpenStoredAutomatically(){
+  const x=await dbGet().catch(()=>null); if(!x)return false;
+  $("reuseBtn").classList.remove("hidden");
+  const pw=await dbGetSetting("unlockPassword").catch(()=>null); if(!pw)return false;
+  try{
+    currentData=await decryptEnvelope(x.text,pw);currentEnvelopeText=x.text;selectedText=x.text;selectedName=x.name||"Du_lieu_BCHQS_DONG_BO.json";selectedOrigin=x.source||"remote";
+    renderApp();showMain();return true;
+  }catch{await dbDeleteSetting("unlockPassword").catch(()=>{});return false}
+}
+$("syncSettingsBtn").addEventListener("click",openSyncModal);
+$("gateSyncSettingsBtn").addEventListener("click",openSyncModal);
+$("syncCloseBtn").addEventListener("click",closeSyncModal);
+$("syncModal").addEventListener("click",e=>{if(e.target===$("syncModal"))closeSyncModal()});
+$("syncIsUploader").addEventListener("change",()=>{$("syncUploadKeyWrap").classList.toggle("hidden",!$("syncIsUploader").checked);$("syncPushBtn").classList.toggle("hidden",!$("syncIsUploader").checked)});
+$("syncSaveBtn").addEventListener("click",async()=>{try{await saveSyncConfig();setCloudState("Đã lưu thiết lập GitHub.","ok")}catch(e){setCloudState(e.message||"Không lưu được.","err")}});
+$("syncPullBtn").addEventListener("click",async()=>{try{await saveSyncConfig();await pullRemoteEnvelope()}catch(e){setCloudState(e.message||"Không đồng bộ được.","err")}});
+$("syncPushBtn").addEventListener("click",async()=>{try{await saveSyncConfig();await pushCurrentEnvelope()}catch(e){setCloudState(e.message||"Không gửi được.","err")}});
+window.addEventListener("online",()=>{pullRemoteEnvelope({silent:true}).catch(()=>{})});
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")pullRemoteEnvelope({silent:true}).catch(()=>{})});
 
 (async function init(){
   if("serviceWorker" in navigator){try{
-    const reg=await navigator.serviceWorker.register("./sw.js?v=052",{updateViaCache:"none"});
+    const reg=await navigator.serviceWorker.register("./sw.js?v=070",{updateViaCache:"none"});
     await reg.update();
   }catch(e){console.warn("SW",e)}}
+  await loadSyncConfig().catch(()=>{});
+  await tryOpenStoredAutomatically().catch(()=>{});
   try{const x=await dbGet();$("reuseBtn").classList.toggle("hidden",!x)}catch{}
   updateOnlineState();
+  if(syncConfig?.owner&&syncConfig?.repo){
+    pullRemoteEnvelope({silent:true}).catch(()=>{});
+    syncTimer=setInterval(()=>pullRemoteEnvelope({silent:true}).catch(()=>{}),120000);
+  }
 })();

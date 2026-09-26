@@ -8,10 +8,10 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="BCHQS Chỉ huy">
   <title>BCHQS Chỉ huy</title>
-  <link rel="manifest" href="./manifest.webmanifest?v=052">
+  <link rel="manifest" href="./manifest.webmanifest?v=070">
   <link rel="apple-touch-icon" href="./icons/icon-180.png">
   <link rel="icon" href="./icons/icon-192.png">
-  <link rel="stylesheet" href="./style.css?v=052">
+  <link rel="stylesheet" href="./style.css?v=070">
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -28,7 +28,7 @@
       <div class="gate-card">
         <div class="gate-icon">🔐</div>
         <h2 id="gateTitle">Mở dữ liệu chỉ huy</h2>
-        <p id="gateHint">Chọn file <b>.json</b> đã xuất từ BCHQS. File được giải mã ngay trên điện thoại và không tải lên Internet.</p>
+        <p id="gateHint">Máy đồng bộ chọn file <b>.json</b> một lần. Các máy Chỉ huy khác tự nhận bản mới từ GitHub khi mở ứng dụng. Dữ liệu trên GitHub vẫn là gói đã mã hóa.</p>
 
         <label class="file-btn">
           <input id="bgmFile" type="file" accept=".json,application/json" hidden>
@@ -47,6 +47,7 @@
         </div>
 
         <button id="reuseBtn" class="secondary-btn hidden" type="button">Mở lại file gần nhất</button>
+        <button id="gateSyncSettingsBtn" class="secondary-btn" type="button">☁ Thiết lập đồng bộ tự động</button>
         <div id="gateMsg" class="message"></div>
       </div>
 
@@ -60,9 +61,11 @@
           <div class="top-brand-text">
             <div class="eyebrow">BCHQS CHỈ HUY</div>
             <div id="syncTime" class="sync-time">Chưa có dữ liệu</div>
+            <div id="cloudState" class="cloud-state">Đồng bộ: chưa thiết lập</div>
           </div>
         </div>
         <div class="top-actions">
+          <button id="syncSettingsBtn" class="top-btn" type="button" title="Đồng bộ điện thoại" aria-label="Đồng bộ điện thoại">☁</button>
           <button id="importAgainBtn" class="top-btn" type="button" title="Nhập file mới" aria-label="Nhập file mới">↻</button>
           <button id="lockBtn" class="top-btn" type="button" title="Khóa ứng dụng" aria-label="Khóa ứng dụng">🔒</button>
         </div>
@@ -96,6 +99,7 @@
           <div class="search-wrap"><input id="taskSearch" class="search-input" placeholder="🔎  Tìm nội dung hoặc người thực hiện..."></div>
           <div id="taskFilters" class="filter-strip">
             <button class="filter-btn active" data-filter="all">Tất cả <b id="filterCountAll">0</b></button>
+            <button class="filter-btn" data-filter="active">Đang xử lý <b id="filterCountActive">0</b></button>
             <button class="filter-btn" data-filter="incoming">VB đến <b id="filterCountIncoming">0</b></button>
             <button class="filter-btn danger-filter" data-filter="overdue">Quá hạn <b id="filterCountOverdue">0</b></button>
             <button class="filter-btn warn-filter" data-filter="soon">Sắp hạn <b id="filterCountSoon">0</b></button>
@@ -128,6 +132,33 @@
     </section>
   </div>
 
+  <div id="syncModal" class="modal-back hidden" role="dialog" aria-modal="true">
+    <div class="modal-card sync-modal-card">
+      <div class="modal-grip"></div>
+      <div class="modal-head">
+        <strong>Đồng bộ Chỉ huy</strong>
+        <button id="syncCloseBtn" class="close-btn" type="button">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="sync-note"><b>GitHub-only</b><br>Máy BCHQS vẫn hoàn toàn offline. <b>Máy đồng bộ</b> nhập file JSON mã hóa rồi ghi file <code>data/latest.json</code> vào chính kho GitHub của PWA. Các máy Chỉ huy khác tự tải bản mới khi mở app.</div>
+        <div class="sync-field"><label>Tài khoản GitHub</label><input id="syncGithubOwner" type="text" autocomplete="off" placeholder="Ví dụ: ten-github"></div>
+        <div class="sync-field"><label>Repository</label><input id="syncGithubRepo" type="text" autocomplete="off" placeholder="Ví dụ: bchqs-chi-huy"></div>
+        <div class="sync-field"><label>Nhánh</label><input id="syncGithubBranch" type="text" autocomplete="off" placeholder="main" value="main"></div>
+        <div class="sync-warning">Nếu app đang mở từ địa chỉ <b>github.io</b>, các ô GitHub phía trên sẽ được tự nhận diện. Repository cần để <b>Public</b> để các máy Chỉ huy đọc bản mã hóa mà không cần token.</div>
+        <label class="sync-check"><input id="syncIsUploader" type="checkbox"> Đây là <b>Máy đồng bộ</b> được phép đưa bản mới lên GitHub</label>
+        <div id="syncUploadKeyWrap" class="sync-field hidden"><label>GitHub Fine-grained Token</label><input id="syncUploadKey" type="password" autocomplete="off" placeholder="Chỉ lưu trên Máy đồng bộ"></div>
+        <label class="sync-check"><input id="syncRememberPassword" type="checkbox"> Ghi nhớ mật khẩu dữ liệu trên điện thoại này để tự mở bản mới</label>
+        <div class="sync-warning">Token GitHub chỉ lưu trong Máy đồng bộ và chỉ dùng để cập nhật <b>data/latest.json</b>. Mật khẩu giải mã không được tải lên GitHub.</div>
+        <div id="syncModalStatus" class="sync-modal-status"></div>
+        <div class="sync-actions">
+          <button id="syncSaveBtn" class="secondary-btn" type="button">Lưu thiết lập</button>
+          <button id="syncPullBtn" class="primary-btn" type="button">Kiểm tra bản mới</button>
+          <button id="syncPushBtn" class="primary-btn hidden" type="button">Đưa bản hiện tại lên GitHub</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="detailModal" class="modal-back hidden" role="dialog" aria-modal="true">
     <div class="modal-card">
       <div class="modal-grip"></div>
@@ -139,6 +170,6 @@
     </div>
   </div>
 
-  <script src="./app.js?v=052"></script>
+  <script src="./app.js?v=070"></script>
 </body>
 </html>
