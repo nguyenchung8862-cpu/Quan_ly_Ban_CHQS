@@ -337,7 +337,10 @@ for(const btn of document.querySelectorAll(".nav-btn")){
 }
 
 (async function init(){
-  if("serviceWorker" in navigator){try{await navigator.serviceWorker.register("./sw.js")}catch(e){console.warn("SW",e)}}
+  if("serviceWorker" in navigator){try{
+    const reg=await navigator.serviceWorker.register("./sw.js?v=052",{updateViaCache:"none"});
+    await reg.update();
+  }catch(e){console.warn("SW",e)}}
   try{const x=await dbGet();$("reuseBtn").classList.toggle("hidden",!x)}catch{}
   updateOnlineState();
 })();

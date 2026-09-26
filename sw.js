@@ -1,11 +1,11 @@
 "use strict";
-const CACHE = "bchqs-chihuy-v0.5.0-de-nhin";
+const CACHE = "bchqs-chihuy-v0.5.2-viewport-fix-r2";
 const RELATIVE_ASSETS = [
   "./",
   "./index.html",
-  "./style.css",
-  "./app.js",
-  "./manifest.webmanifest",
+  "./style.css?v=052",
+  "./app.js?v=052",
+  "./manifest.webmanifest?v=052",
   "./icons/icon-180.png",
   "./icons/icon-192.png",
   "./icons/icon-512.png"
