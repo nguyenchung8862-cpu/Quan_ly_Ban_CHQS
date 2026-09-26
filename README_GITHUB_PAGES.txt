@@ -1,40 +1,27 @@
-BCHQS CHỈ HUY PWA V0.3 - TƯƠNG THÍCH FILE TẢI QUA ZALO
+BCHQS CHỈ HUY PWA V0.5 - GIAO DIỆN DỄ NHÌN
+============================================
 
-BCHQS CHỈ HUY PWA V0.2 - GITHUB PAGES
-=====================================
+Bản V0.5 giữ nguyên cơ chế mở file .json mã hóa của V0.4 và làm lại giao diện điện thoại.
 
-MỤC ĐÍCH
-- Chạy giao diện PWA trên GitHub Pages bằng HTTPS.
-- GitHub chỉ lưu mã giao diện của ứng dụng.
-- KHÔNG tải file .json, mật khẩu hoặc dữ liệu BCHQS lên repository.
-- File .json được người dùng chọn từ iPhone và giải mã cục bộ trên thiết bị.
+NÂNG CẤP GIAO DIỆN
+- Chữ, nút và thẻ công việc lớn hơn, dễ bấm trên iPhone.
+- Tổng quan 4 ô rõ: Đang xử lý / Sắp đến hạn / Quá hạn / Cảnh báo.
+- Văn bản đến và nhiệm vụ có nhãn riêng.
+- Hạn xử lý tự nhấn mạnh: còn bao lâu / quá bao lâu.
+- Thêm lọc nhanh: Tất cả / VB đến / Quá hạn / Sắp hạn / Đã xong.
+- Danh sách tự ưu tiên Quá hạn -> Sắp hạn -> Đang xử lý -> Đã xong.
+- Thanh điều hướng dưới lớn và dễ nhận biết hơn.
+- Popup chi tiết dạng bottom-sheet gọn hơn.
+- Vẫn khóa pinch zoom/double tap zoom như các bản trước.
 
-CÁCH ĐƯA LÊN GITHUB
-1. Tạo một repository mới, ví dụ: bchqs-chi-huy.
-2. Đưa TOÀN BỘ nội dung trong thư mục này lên thư mục gốc của repository:
-   index.html, app.js, style.css, sw.js, manifest.webmanifest, .nojekyll, 404.html và thư mục icons.
-3. Vào Settings > Pages.
-4. Chọn Deploy from a branch.
-5. Branch: main, Folder: /(root), rồi Save.
-6. Sau khi GitHub Pages xuất bản, địa chỉ thường có dạng:
-   https://TEN_TAI_KHOAN.github.io/bchqs-chi-huy/
-
-CÀI TRÊN IPHONE
-1. Mở đúng địa chỉ GitHub Pages bằng Safari.
-2. Nhấn Chia sẻ (Share).
-3. Chọn Thêm vào Màn hình chính (Add to Home Screen).
-4. Mở biểu tượng BCHQS Chỉ huy ít nhất 1 lần khi có Internet để Service Worker cache giao diện.
-5. Sau đó có thể mở app khi ngoại tuyến và nhập file .json từ ứng dụng Files.
+CẬP NHẬT GITHUB PAGES
+1. Xóa/chép đè toàn bộ file của bản PWA cũ bằng nội dung gói V0.5.
+2. Giữ nguyên cấu trúc thư mục icons.
+3. Commit/push lên branch đang dùng cho GitHub Pages.
+4. Mở URL GitHub Pages bằng Safari một lần khi có mạng.
+5. Đóng app đã cài ở Màn hình chính rồi mở lại. Service Worker V0.5 sẽ thay cache cũ.
 
 BẢO MẬT
-- Không đưa file .json thật lên GitHub.
-- Không ghi mật khẩu vào source code, README hoặc repository.
-- Nên dùng mật khẩu dài, khó đoán cho từng gói dữ liệu.
-- Repository public chỉ làm lộ mã nguồn giao diện, không làm lộ dữ liệu nếu file .json và mật khẩu không được upload.
-
-GHI CHÚ
-- App khóa pinch-zoom/double-tap zoom trong giao diện như bản V0.1.
-- Dữ liệu giải mã không được gửi lên GitHub Pages.
-
-
-V0.4: Dùng file .json để dễ gửi và tải qua Zalo/iPhone. Nội dung bên trong vẫn là gói BCHQS đã mã hóa AES-256-GCM; không phải dữ liệu nhiệm vụ dạng rõ.
+- Không tải file dữ liệu thật lên GitHub.
+- Không đưa mật khẩu vào source code.
+- File .json vẫn là gói BCHQS mã hóa AES-256-GCM; giao diện V0.5 không làm thay đổi định dạng mã hóa.

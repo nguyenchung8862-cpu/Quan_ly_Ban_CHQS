@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-  <meta name="theme-color" content="#294d2c">
+  <meta name="theme-color" content="#173b21">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="BCHQS Chỉ huy">
@@ -17,21 +17,22 @@
   <div id="app" class="app-shell">
     <section id="gate" class="gate screen active">
       <div class="brand-card">
-        <div class="brand-mark">JSON</div>
+        <div class="brand-mark">★</div>
         <div>
-          <h1>BCHQS CHỈ HUY</h1>
-          <p>Ban CHQS xã Bù Gia Mập</p>
+          <div class="brand-kicker">ỨNG DỤNG CHỈ HUY</div>
+          <h1>BCHQS BÙ GIA MẬP</h1>
+          <p>Theo dõi công việc trên điện thoại</p>
         </div>
       </div>
 
       <div class="gate-card">
-        <div class="lock-icon">🔐</div>
-        <h2 id="gateTitle">Nhập dữ liệu BCHQS</h2>
-        <p id="gateHint">Chọn file .json đã xuất từ BCHQS. Dữ liệu bên trong vẫn được mã hóa và giải mã ngay trên điện thoại.</p>
+        <div class="gate-icon">🔐</div>
+        <h2 id="gateTitle">Mở dữ liệu chỉ huy</h2>
+        <p id="gateHint">Chọn file <b>.json</b> đã xuất từ BCHQS. File được giải mã ngay trên điện thoại và không tải lên Internet.</p>
 
         <label class="file-btn">
           <input id="bgmFile" type="file" accept=".json,application/json" hidden>
-          <span>Chọn file dữ liệu</span>
+          <span class="btn-icon">＋</span><span>Chọn file JSON</span>
         </label>
 
         <div id="selectedFile" class="selected-file hidden"></div>
@@ -42,69 +43,94 @@
             <input id="password" type="password" inputmode="text" autocomplete="off" placeholder="Nhập mật khẩu">
             <button id="togglePassword" class="icon-btn" type="button" aria-label="Hiện mật khẩu">👁</button>
           </div>
-          <button id="unlockBtn" class="primary-btn" type="button">Mở khóa dữ liệu</button>
+          <button id="unlockBtn" class="primary-btn" type="button"><span class="btn-icon">✓</span><span>Mở dữ liệu</span></button>
         </div>
 
-        <button id="reuseBtn" class="secondary-btn hidden" type="button">Mở file đã lưu trên máy</button>
+        <button id="reuseBtn" class="secondary-btn hidden" type="button">Mở lại file gần nhất</button>
         <div id="gateMsg" class="message"></div>
       </div>
 
-      <div class="privacy-note">Ứng dụng không tải file lên Internet. Giải mã được thực hiện ngay trên điện thoại.</div>
+      <div class="privacy-note"><b>Riêng tư:</b> dữ liệu và mật khẩu chỉ xử lý trên thiết bị này.</div>
     </section>
 
     <section id="main" class="screen main-screen">
       <header class="topbar">
-        <div>
-          <div class="eyebrow">BCHQS CHỈ HUY</div>
-          <div id="syncTime" class="sync-time">Chưa có dữ liệu</div>
+        <div class="top-brand">
+          <div class="top-emblem">★</div>
+          <div class="top-brand-text">
+            <div class="eyebrow">BCHQS CHỈ HUY</div>
+            <div id="syncTime" class="sync-time">Chưa có dữ liệu</div>
+          </div>
         </div>
         <div class="top-actions">
-          <button id="importAgainBtn" class="top-btn" type="button" title="Nhập file mới">↻</button>
-          <button id="lockBtn" class="top-btn" type="button" title="Khóa">🔒</button>
+          <button id="importAgainBtn" class="top-btn" type="button" title="Nhập file mới" aria-label="Nhập file mới">↻</button>
+          <button id="lockBtn" class="top-btn" type="button" title="Khóa ứng dụng" aria-label="Khóa ứng dụng">🔒</button>
         </div>
       </header>
 
       <div id="staleBanner" class="stale-banner hidden"></div>
-      <div id="offlineBanner" class="offline-banner hidden">Đang ngoại tuyến · dữ liệu trong máy vẫn xem được</div>
+      <div id="offlineBanner" class="offline-banner hidden">Đang ngoại tuyến · dữ liệu đã lưu vẫn xem được</div>
 
       <main id="content" class="content-scroll">
         <section class="tab-page active" data-page="overview">
+          <div class="page-heading">
+            <div><small>TỔNG QUAN</small><h2>Tình hình xử lý</h2></div>
+            <span class="page-badge">Chỉ huy</span>
+          </div>
           <div id="kpis" class="kpi-grid"></div>
-          <div class="panel">
-            <div class="panel-title">Cần chú ý</div>
+          <div class="panel attention-panel">
+            <div class="panel-title"><span>⚠</span><div><b>Cần chú ý</b><small>Việc cần xem trước</small></div></div>
             <div id="attentionList" class="list-stack"></div>
           </div>
           <div class="panel">
-            <div class="panel-title">Nhiệm vụ gần hạn</div>
+            <div class="panel-title"><span>◷</span><div><b>Gần đến hạn</b><small>Sắp xếp theo hạn xử lý</small></div></div>
             <div id="nearDueList" class="list-stack"></div>
           </div>
         </section>
 
         <section class="tab-page" data-page="tasks">
-          <div class="search-wrap"><input id="taskSearch" class="search-input" placeholder="Tìm nhiệm vụ, người thực hiện..."></div>
-          <div id="taskList" class="list-stack"></div>
+          <div class="page-heading compact-heading">
+            <div><small>CÔNG VIỆC</small><h2>Nhiệm vụ & Văn bản</h2></div>
+            <span id="taskCountLabel" class="page-badge">0 việc</span>
+          </div>
+          <div class="search-wrap"><input id="taskSearch" class="search-input" placeholder="🔎  Tìm nội dung hoặc người thực hiện..."></div>
+          <div id="taskFilters" class="filter-strip">
+            <button class="filter-btn active" data-filter="all">Tất cả <b id="filterCountAll">0</b></button>
+            <button class="filter-btn" data-filter="incoming">VB đến <b id="filterCountIncoming">0</b></button>
+            <button class="filter-btn danger-filter" data-filter="overdue">Quá hạn <b id="filterCountOverdue">0</b></button>
+            <button class="filter-btn warn-filter" data-filter="soon">Sắp hạn <b id="filterCountSoon">0</b></button>
+            <button class="filter-btn" data-filter="done">Đã xong <b id="filterCountDone">0</b></button>
+          </div>
+          <div id="taskList" class="list-stack task-list"></div>
         </section>
 
         <section class="tab-page" data-page="guard">
+          <div class="page-heading compact-heading">
+            <div><small>TRỰC GÁC</small><h2>Ca trực hiện tại</h2></div>
+          </div>
           <div id="guardList" class="list-stack"></div>
         </section>
 
         <section class="tab-page" data-page="alerts">
+          <div class="page-heading compact-heading">
+            <div><small>CẢNH BÁO</small><h2>Thông tin cần xử lý</h2></div>
+          </div>
           <div id="alertList" class="list-stack"></div>
         </section>
       </main>
 
       <nav class="bottom-nav">
-        <button class="nav-btn active" data-nav="overview"><span>⌂</span><small>Tổng quan</small></button>
-        <button class="nav-btn" data-nav="tasks"><span>✓</span><small>Nhiệm vụ</small></button>
-        <button class="nav-btn" data-nav="guard"><span>◉</span><small>Trực gác</small></button>
-        <button class="nav-btn" data-nav="alerts"><span>!</span><small>Cảnh báo</small></button>
+        <button class="nav-btn active" data-nav="overview"><span class="nav-icon">⌂</span><small>Tổng quan</small></button>
+        <button class="nav-btn" data-nav="tasks"><span class="nav-icon">☑</span><small>Công việc</small></button>
+        <button class="nav-btn" data-nav="guard"><span class="nav-icon">◉</span><small>Trực gác</small></button>
+        <button class="nav-btn" data-nav="alerts"><span class="nav-icon">!</span><small>Cảnh báo</small></button>
       </nav>
     </section>
   </div>
 
   <div id="detailModal" class="modal-back hidden" role="dialog" aria-modal="true">
     <div class="modal-card">
+      <div class="modal-grip"></div>
       <div class="modal-head">
         <strong id="detailTitle">Chi tiết</strong>
         <button id="detailClose" class="close-btn" type="button">×</button>

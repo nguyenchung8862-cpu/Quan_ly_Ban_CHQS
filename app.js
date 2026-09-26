@@ -11,6 +11,7 @@ let currentData = null;
 let currentEnvelopeText = null;
 let selectedText = null;
 let selectedName = "";
+let taskFilter = "all";
 
 const $ = id => document.getElementById(id);
 
@@ -167,60 +168,148 @@ function fmtDateTime(v){
   if(!v)return "—"; const d=new Date(v); if(Number.isNaN(d.getTime()))return String(v);
   return new Intl.DateTimeFormat("vi-VN",{hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit",year:"numeric"}).format(d);
 }
+function fmtShortDate(v){
+  if(!v)return "—"; const d=new Date(v); if(Number.isNaN(d.getTime()))return String(v);
+  return new Intl.DateTimeFormat("vi-VN",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}).format(d);
+}
 function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]))}
+function isDone(x){return !!x?.done || /hoàn thành|đã xong|xong/i.test(String(x?.status||""))}
+function isIncoming(x){return String(x?.sourceType||x?.type||"").toLowerCase()==="incoming" || /^\s*\[vb đến\]/i.test(String(x?.title||x?.content||""))}
+function isOverdue(x){
+  if(isDone(x))return false;
+  if(/quá hạn/i.test(String(x?.status||"")))return true;
+  if(!x?.deadline)return false; const t=new Date(x.deadline).getTime(); return Number.isFinite(t)&&t<Date.now();
+}
+function isSoon(x){
+  if(isDone(x)||isOverdue(x))return false;
+  if(/sắp/i.test(String(x?.status||"")))return true;
+  if(!x?.deadline)return false; const t=new Date(x.deadline).getTime();
+  return Number.isFinite(t)&&t>=Date.now()&&t-Date.now()<=72*3600*1000;
+}
 function statusClass(s){s=String(s||"").toLowerCase();if(/quá|nguy|mất|chưa nhận|bất thường/.test(s))return"danger";if(/sắp|chờ|cảnh báo|muộn/.test(s))return"warn";if(/xong|hoàn|bình thường|đã nhận|đang trực/.test(s))return"ok";return"muted"}
+function taskStateClass(x){return isOverdue(x)?"danger-card":isSoon(x)?"warn-card":isDone(x)?"ok-card":""}
+function cleanTaskTitle(x){return String(x?.title||x?.content||"Nhiệm vụ").replace(/^\s*\[vb đến\]\s*/i,"").trim()||"Nhiệm vụ"}
+function deadlineInfo(x){
+  if(!x?.deadline)return {text:"Chưa có hạn",cls:""};
+  const t=new Date(x.deadline).getTime(); if(!Number.isFinite(t))return {text:String(x.deadline),cls:""};
+  if(isDone(x))return {text:"Hạn: "+fmtShortDate(x.deadline),cls:""};
+  const diff=t-Date.now(), abs=Math.abs(diff), hours=Math.ceil(abs/3600000);
+  if(diff<0){
+    const text=hours<24?`Quá ${hours} giờ`:`Quá ${Math.ceil(hours/24)} ngày`;
+    return {text:`⚠ ${text} · ${fmtShortDate(x.deadline)}`,cls:"due-danger"};
+  }
+  if(diff<=72*3600000){
+    const text=hours<24?`Còn ${Math.max(1,hours)} giờ`:`Còn ${Math.ceil(hours/24)} ngày`;
+    return {text:`◷ ${text} · ${fmtShortDate(x.deadline)}`,cls:"due-warn"};
+  }
+  return {text:"Hạn: "+fmtShortDate(x.deadline),cls:""};
+}
 
 function renderApp(){
   const d=currentData; if(!d)return;
-  $("syncTime").textContent="Dữ liệu: "+fmtDateTime(d.generatedAt);
+  $("syncTime").textContent="Cập nhật: "+fmtDateTime(d.generatedAt);
   renderStale(d.generatedAt);
   const tasks=d.tasks||[], guards=d.guards||[], alerts=d.alerts||[];
-  const active=tasks.filter(x=>!x.done && !/hoàn thành/i.test(x.status||""));
-  const overdue=tasks.filter(x=>/quá hạn/i.test(x.status||"") || (!x.done && x.deadline && new Date(x.deadline)<new Date()));
-  const soon=tasks.filter(x=>/sắp/i.test(x.status||""));
-  $("kpis").innerHTML=[
-    [active.length,"Đang thực hiện",""] ,[soon.length,"Sắp đến hạn","warn"],[overdue.length,"Quá hạn","danger"],[alerts.length,"Cảnh báo","danger"]
-  ].map(([n,l,c])=>`<div class="kpi ${c}"><small>${esc(l).toUpperCase()}</small><strong>${n}</strong></div>`).join("");
+  const active=tasks.filter(x=>!isDone(x));
+  const overdue=tasks.filter(isOverdue);
+  const soon=tasks.filter(isSoon);
+  const kpiData=[
+    [active.length,"Đang xử lý","","✓"],
+    [soon.length,"Sắp đến hạn","warn","◷"],
+    [overdue.length,"Quá hạn","danger","!"],
+    [alerts.length,"Cảnh báo","danger","⚠"]
+  ];
+  $("kpis").innerHTML=kpiData.map(([n,l,c,i])=>`<div class="kpi ${c}"><div class="kpi-icon">${i}</div><small>${esc(l).toUpperCase()}</small><strong>${n}</strong></div>`).join("");
 
-  const attention=[...alerts.slice(0,3),...overdue.slice(0,2).map(t=>({title:t.title||t.content,type:"Nhiệm vụ quá hạn",status:"Quá hạn"}))];
-  $("attentionList").innerHTML=attention.length?attention.map(renderSimple).join(""):'<div class="empty">Không có cảnh báo đáng chú ý.</div>';
+  const attention=[
+    ...alerts.slice(0,3),
+    ...overdue.slice(0,3).map(t=>({title:cleanTaskTitle(t),type:isIncoming(t)?"VB đến quá hạn":"Nhiệm vụ quá hạn",status:"Quá hạn"}))
+  ];
+  $("attentionList").innerHTML=attention.length?attention.map(renderSimple).join(""):'<div class="empty">✓ Không có cảnh báo đáng chú ý.</div>';
 
-  const near=[...tasks].filter(x=>x.deadline&&!x.done).sort((a,b)=>new Date(a.deadline)-new Date(b.deadline)).slice(0,5);
-  $("nearDueList").innerHTML=near.length?near.map(renderTaskCard).join(""):'<div class="empty">Không có nhiệm vụ gần hạn.</div>';
+  const near=[...tasks].filter(x=>x.deadline&&!isDone(x)).sort((a,b)=>new Date(a.deadline)-new Date(b.deadline)).slice(0,5);
+  $("nearDueList").innerHTML=near.length?near.map(renderTaskCard).join(""):'<div class="empty">Không có công việc gần hạn.</div>';
   renderTasks();
   $("guardList").innerHTML=guards.length?guards.map(renderGuardCard).join(""):'<div class="empty">Chưa có dữ liệu trực gác.</div>';
-  $("alertList").innerHTML=alerts.length?alerts.map(renderAlertCard).join(""):'<div class="empty">Không có cảnh báo.</div>';
+  $("alertList").innerHTML=alerts.length?alerts.map(renderAlertCard).join(""):'<div class="empty">✓ Không có cảnh báo.</div>';
   bindCards();
 }
 
+function filterTasks(list,filter){
+  if(filter==="incoming")return list.filter(isIncoming);
+  if(filter==="overdue")return list.filter(isOverdue);
+  if(filter==="soon")return list.filter(isSoon);
+  if(filter==="done")return list.filter(isDone);
+  return list;
+}
+function updateTaskFilterCounts(tasks){
+  const map={
+    filterCountAll:tasks.length,
+    filterCountIncoming:tasks.filter(isIncoming).length,
+    filterCountOverdue:tasks.filter(isOverdue).length,
+    filterCountSoon:tasks.filter(isSoon).length,
+    filterCountDone:tasks.filter(isDone).length
+  };
+  for(const [id,n] of Object.entries(map)){const el=$(id);if(el)el.textContent=n}
+}
 function renderTasks(){
+  const all=currentData?.tasks||[];
+  updateTaskFilterCounts(all);
   const q=($("taskSearch").value||"").trim().toLowerCase();
-  const list=(currentData?.tasks||[]).filter(x=>!q||JSON.stringify(x).toLowerCase().includes(q));
-  $("taskList").innerHTML=list.length?list.map(renderTaskCard).join(""):'<div class="empty">Không tìm thấy nhiệm vụ.</div>';
+  let list=filterTasks(all,taskFilter).filter(x=>!q||JSON.stringify(x).toLowerCase().includes(q));
+  list=[...list].sort((a,b)=>{
+    const rank=x=>isOverdue(x)?0:isSoon(x)?1:!isDone(x)?2:3;
+    const r=rank(a)-rank(b); if(r)return r;
+    const ad=a.deadline?new Date(a.deadline).getTime():Number.MAX_SAFE_INTEGER;
+    const bd=b.deadline?new Date(b.deadline).getTime():Number.MAX_SAFE_INTEGER;
+    return ad-bd;
+  });
+  if($("taskCountLabel"))$("taskCountLabel").textContent=`${list.length} việc`;
+  $("taskList").innerHTML=list.length?list.map(renderTaskCard).join(""):'<div class="empty">Không có công việc phù hợp bộ lọc.</div>';
   bindCards();
 }
 $("taskSearch").addEventListener("input",renderTasks);
+for(const btn of document.querySelectorAll(".filter-btn")){
+  btn.addEventListener("click",()=>{
+    taskFilter=btn.dataset.filter||"all";
+    document.querySelectorAll(".filter-btn").forEach(x=>x.classList.toggle("active",x===btn));
+    renderTasks();
+    $("content").scrollTop=0;
+  });
+}
 
 function renderTaskCard(x){
-  return `<div class="item-card clickable" data-kind="task" data-id="${esc(x.id)}"><div class="item-top"><div class="item-title">${esc(x.title||x.content||"Nhiệm vụ")}</div><span class="badge ${statusClass(x.status)}">${esc(x.status||"Đang thực hiện")}</span></div><div class="item-sub">${esc(x.assignee||"Chưa rõ người thực hiện")}</div><div class="meta-row"><span class="meta-chip">Hạn: ${esc(fmtDateTime(x.deadline))}</span>${x.progress!=null?`<span class="meta-chip">Tiến độ: ${esc(x.progress)}%</span>`:""}</div></div>`;
+  const incoming=isIncoming(x), due=deadlineInfo(x);
+  const status=isOverdue(x)?"Quá hạn":isSoon(x)&&!/sắp/i.test(String(x.status||""))?"Sắp đến hạn":String(x.status|| (isDone(x)?"Hoàn thành":"Đang xử lý"));
+  return `<div class="item-card task-card ${taskStateClass(x)} clickable" data-kind="task" data-id="${esc(x.id)}">
+    <div class="item-top">
+      <div class="item-heading">
+        <span class="source-tag ${incoming?"incoming":""}">${incoming?"VĂN BẢN ĐẾN":"NHIỆM VỤ"}</span>
+        <div class="item-title">${esc(cleanTaskTitle(x))}</div>
+      </div>
+      <span class="badge ${statusClass(status)}">${esc(status)}</span>
+    </div>
+    <div class="item-sub"><span>👤</span><span><strong>${esc(x.assignee||"Chưa rõ người thực hiện")}</strong>${x.supervisor?` · phụ trách: ${esc(x.supervisor)}`:""}</span></div>
+    <div class="meta-row"><span class="meta-chip ${due.cls}">${esc(due.text)}</span>${x.progress!=null?`<span class="meta-chip">Tiến độ: ${esc(x.progress)}%</span>`:""}</div>
+  </div>`;
 }
 function renderGuardCard(x){
-  return `<div class="item-card clickable" data-kind="guard" data-id="${esc(x.id)}"><div class="item-top"><div class="item-title">${esc(x.post||"Vị trí trực")}</div><span class="badge ${statusClass(x.status)}">${esc(x.status||"—")}</span></div><div class="item-sub">${esc(x.person||"Chưa phân công")} · ${esc(x.shift||"")}</div><div class="meta-row"><span class="meta-chip">Xác nhận: ${esc(fmtDateTime(x.lastCheck))}</span></div></div>`;
+  return `<div class="item-card clickable" data-kind="guard" data-id="${esc(x.id)}"><div class="item-top"><div class="item-heading"><span class="source-tag">CA TRỰC</span><div class="item-title">${esc(x.post||"Vị trí trực")}</div></div><span class="badge ${statusClass(x.status)}">${esc(x.status||"—")}</span></div><div class="item-sub"><span>👤</span><span><strong>${esc(x.person||"Chưa phân công")}</strong>${x.shift?` · ${esc(x.shift)}`:""}</span></div><div class="meta-row"><span class="meta-chip">Xác nhận: ${esc(fmtShortDate(x.lastCheck))}</span></div></div>`;
 }
 function renderAlertCard(x){
-  return `<div class="item-card clickable" data-kind="alert" data-id="${esc(x.id)}"><div class="item-top"><div class="item-title">${esc(x.title||"Cảnh báo")}</div><span class="badge ${statusClass(x.level||x.status||"Cảnh báo")}">${esc(x.level||x.status||"Cảnh báo")}</span></div><div class="item-sub">${esc(x.message||"")}</div><div class="meta-row"><span class="meta-chip">${esc(fmtDateTime(x.time))}</span></div></div>`;
+  return `<div class="item-card clickable" data-kind="alert" data-id="${esc(x.id)}"><div class="item-top"><div class="item-heading"><span class="source-tag">CẢNH BÁO</span><div class="item-title">${esc(x.title||"Cảnh báo")}</div></div><span class="badge ${statusClass(x.level||x.status||"Cảnh báo")}">${esc(x.level||x.status||"Cảnh báo")}</span></div><div class="item-sub"><span>⚠</span><span>${esc(x.message||"")}</span></div><div class="meta-row"><span class="meta-chip">${esc(fmtDateTime(x.time))}</span></div></div>`;
 }
-function renderSimple(x){return `<div class="item-card"><div class="item-top"><div class="item-title">${esc(x.title||x.message||x.content||"Cảnh báo")}</div><span class="badge ${statusClass(x.level||x.status||x.type)}">${esc(x.level||x.status||x.type||"Chú ý")}</span></div>${x.message?`<div class="item-sub">${esc(x.message)}</div>`:""}</div>`}
+function renderSimple(x){
+  return `<div class="item-card"><div class="item-top"><div class="item-heading"><div class="item-title">${esc(x.title||x.message||x.content||"Cảnh báo")}</div></div><span class="badge ${statusClass(x.level||x.status||x.type)}">${esc(x.level||x.status||x.type||"Chú ý")}</span></div>${x.message?`<div class="item-sub"><span>⚠</span><span>${esc(x.message)}</span></div>`:""}</div>`;
+}
 
 function bindCards(){
-  document.querySelectorAll("[data-kind][data-id]").forEach(el=>{
-    el.onclick=()=>openDetail(el.dataset.kind,el.dataset.id);
-  });
+  document.querySelectorAll("[data-kind][data-id]").forEach(el=>{el.onclick=()=>openDetail(el.dataset.kind,el.dataset.id)});
 }
 function openDetail(kind,id){
   const arr=kind==="task"?currentData.tasks:kind==="guard"?currentData.guards:currentData.alerts;
   const x=arr.find(v=>String(v.id)===String(id)); if(!x)return;
-  $("detailTitle").textContent=kind==="task"?"Chi tiết nhiệm vụ":kind==="guard"?"Chi tiết trực gác":"Chi tiết cảnh báo";
+  $("detailTitle").textContent=kind==="task"?(isIncoming(x)?"Chi tiết văn bản đến":"Chi tiết nhiệm vụ"):kind==="guard"?"Chi tiết trực gác":"Chi tiết cảnh báo";
   const labels=kind==="task"?{
     title:"Nội dung",assignee:"Người thực hiện",supervisor:"Người phụ trách",deadline:"Hạn xử lý",status:"Trạng thái",progress:"Tiến độ",report:"Báo cáo gần nhất",note:"Ghi chú"
   }:kind==="guard"?{post:"Vị trí",person:"Người trực",shift:"Ca trực",status:"Trạng thái",receivedAt:"Nhận ca",lastCheck:"Xác nhận gần nhất",note:"Ghi chú"}:{title:"Cảnh báo",message:"Nội dung",level:"Mức độ",time:"Thời gian",source:"Nguồn"};
@@ -234,7 +323,7 @@ function renderStale(v){
   const b=$("staleBanner"); const t=new Date(v).getTime();
   if(!t){b.classList.add("hidden");return}
   const mins=Math.floor((Date.now()-t)/60000);
-  if(mins>=60){const h=Math.floor(mins/60),m=mins%60;b.textContent=`⚠ Dữ liệu đã cũ ${h?`${h} giờ `:""}${m} phút`;b.classList.remove("hidden")}else b.classList.add("hidden");
+  if(mins>=60){const h=Math.floor(mins/60),m=mins%60;b.textContent=`⚠ Dữ liệu đã cũ ${h?`${h} giờ `:""}${m} phút · nên nhập file mới`;b.classList.remove("hidden")}else b.classList.add("hidden");
 }
 function updateOnlineState(){ $("offlineBanner").classList.toggle("hidden",navigator.onLine); }
 window.addEventListener("online",updateOnlineState);window.addEventListener("offline",updateOnlineState);
